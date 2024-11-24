@@ -1,0 +1,89 @@
+#!/bin/sh -e
+
+export DESTDIR="$1"
+
+patch -p1 < fix-curl.patch
+
+sed '/CondBitmap/,/^}/s/LLVM_VERSION.*/& \&\& LLVM_VERSION_LT(19, 0)/' \
+                -i compiler/rustc_llvm/llvm-wrapper/RustWrapper.cpp
+
+        for t in cond* if inline* nest* non_*; do
+                rm -v tests/coverage/mcdc/$t.rs
+        done
+
+# Instruct the compiler to trim absolute paths in resulting binaries and instead
+# change them to relative paths ($PWD/... ./...).
+export RUSTFLAGS="$RUSTFLAGS --remap-path-prefix=$PWD=."
+
+# Ignore checksums of files modified above.
+sed 's/\("files":{\)[^}]*/\1/' \
+    vendor/curl-sys-0.4.72+curl-8.6.0/.cargo-checksum.json > _
+mv -f _ vendor/curl-sys-0.4.72+curl-8.6.0/.cargo-checksum.json
+
+cat > config.toml <<EOF
+[llvm]
+link-shared = true
+
+[build]
+build     = "x86_64-unknown-linux-gnu"
+host      = [ "x86_64-unknown-linux-gnu" ]
+target    = [ "x86_64-unknown-linux-gnu" ]
+
+docs           = false
+compiler-docs  = false
+extended       = true
+submodules     = false
+python         = "python3"
+locked-deps    = true
+vendor         = true
+tools          = [ "cargo", "rustfmt" ]
+sanitizers     = false
+profiler       = false
+full-bootstrap = false
+EOF
+
+# This mimics the download process of rust's 'x.py'
+# bootstrap library to allow for the removal of the internet
+# connection requirement per build.
+mkdir -p "${cache_dir:=build/cache/2024-08-08}"
+
+for tarball in *.tar.xz\?no-extract; do
+    mv -f "$tarball" "$cache_dir/${tarball%%\?no-extract}"
+done
+
+cat >> config.toml <<EOF
+
+[install]
+prefix = "/usr"
+
+[target.x86_64-unknown-linux-gnu]
+llvm-config = "/usr/bin/llvm-config"
+crt-static  = false
+sanitizers  = false
+
+[dist]
+src-tarball = false
+
+[rust]
+backtrace         = false
+channel           = "stable"
+codegen-tests     = false
+codegen-units-std = 1
+codegen-units     = 0
+debug             = false
+debug-assertions  = false
+debuginfo-level   = 0
+incremental       = false
+jemalloc          = false
+rpath             = false
+dist-src          = false
+EOF
+
+python x.py build -j "$(grep -scF 'core id' /proc/cpuinfo)"
+python x.py install
+
+rm -rf \
+    "$1/usr/lib/rustlib/src/" \
+    "$1/usr/share/doc" \
+    "$1/usr/share/zsh" \
+    "$1/usr/lib/rustlib/uninstall.sh"
