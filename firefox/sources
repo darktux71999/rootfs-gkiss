@@ -1,7 +1,0 @@
-https://ftp.mozilla.org/pub/firefox/releases/132.0/source/firefox-132.0.source.tar.xz
-patches/fix-target-detection.patch
-patches/fix-vaapi.patch
-patches/gcc-14.patch
-patches/no-atk.patch
-patches/no-dbus.patch
-patches/no-fribidi.patch
